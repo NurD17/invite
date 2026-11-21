@@ -95,6 +95,13 @@ form .btn{width:100%;margin-top:24px}
 footer{background:#06142e;color:#a9c6f5;text-align:center;padding:50px 22px calc(50px + env(safe-area-inset-bottom,0px));font-size:15px}
 footer h3{font-size:26px;color:var(--gold);margin-bottom:8px}
 
+/* ---------- Music player ---------- */
+.player{position:fixed;right:14px;bottom:calc(14px + env(safe-area-inset-bottom,0px));z-index:40;display:none;align-items:center;gap:10px;padding:8px 14px 8px 8px;border-radius:99px;background:rgba(6,20,46,.88);backdrop-filter:blur(8px);box-shadow:0 10px 26px rgba(6,20,46,.4);border:1px solid rgba(56,189,248,.35)}
+.player.show{display:flex}
+.player button{width:40px;height:40px;border:0;border-radius:50%;background:linear-gradient(135deg,#1e6bff,#0a3fc0);color:#fff;cursor:pointer;display:grid;place-items:center}
+.player button:focus-visible,.player input:focus-visible{outline:3px solid var(--sky);outline-offset:2px}
+.player svg{width:18px;height:18px;fill:#fff}
+.player input[type=range]{width:90px;padding:0;border:0;background:transparent;accent-color:var(--sky)}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
 </style>
 </head>
@@ -183,6 +190,7 @@ footer h3{font-size:26px;color:var(--gold);margin-bottom:8px}
       <label for="note">Кошумча билдирүү (милдеттүү эмес)</label>
       <textarea id="note" maxlength="300"></textarea>
       <p class="err" id="err">Аты-жөнүңүздү жазыңыз.</p>
+      <p id="ok" style="display:none;margin-top:14px;color:#0a7a3d;font-weight:700">Рахмат! Жообуңуз кабыл алынды.</p>
       <button class="btn" type="submit">Жооп жөнөтүү</button>
     </form>
   </div>
@@ -194,17 +202,35 @@ footer h3{font-size:26px;color:var(--gold);margin-bottom:8px}
   <p style="margin-top:22px;font-size:13px">© 2026 Алай райондук билим берүү бөлүмү</p>
 </footer>
 
+<audio id="bgm" src="music.mp3" loop preload="auto"></audio>
+<div class="player" id="player">
+  <button id="pp" aria-label="Музыканы токтотуу / ойнотуу">
+    <svg id="icPause" viewBox="0 0 24 24"><path d="M6 5h4v14H6zM14 5h4v14h-4z"/></svg>
+    <svg id="icPlay" viewBox="0 0 24 24" style="display:none"><path d="M7 4l13 8-13 8z"/></svg>
+  </button>
+  <input id="vol" type="range" min="0" max="100" value="50" aria-label="Үндүн деңгээли">
+</div>
+
 <script>
 /* ===== НАСТРОЙКИ ===== */
 const EVENT = new Date("2026-11-25T09:00:00+06:00"); // дата и время начала (Бишкек, UTC+6)
-const WHATSAPP = "996000000000";                      // номер для ответов, только цифры
+const SHEET_URL = "https://script.google.com/macros/s/AKfycbwLVoFVGZGbPjT7nQdjHOeVyfHko2j87KlqC7bHcgEUpJLy-ik60SdY0sE3VXT0XpMt/exec"; // ссылка вида https://script.google.com/macros/s/.../exec
 
 /* Конверт */
 const env = document.getElementById("envelope");
+const bgm = document.getElementById("bgm"), vol = document.getElementById("vol");
+const icPlay = document.getElementById("icPlay"), icPause = document.getElementById("icPause");
+const START_VOLUME = 0.5; // громкость при старте: от 0 до 1
+bgm.volume = START_VOLUME; vol.value = START_VOLUME * 100;
+function showState() { const on = !bgm.paused; icPause.style.display = on ? "" : "none"; icPlay.style.display = on ? "none" : ""; }
 document.getElementById("openBtn").addEventListener("click", () => {
   env.classList.add("open"); document.body.classList.remove("locked");
+  document.getElementById("player").classList.add("show");
+  bgm.play().then(showState).catch(showState); // клик по конверту разрешает автозапуск
   setTimeout(() => env.remove(), 1800);
 });
+document.getElementById("pp").addEventListener("click", () => { bgm.paused ? bgm.play() : bgm.pause(); showState(); });
+vol.addEventListener("input", () => { bgm.volume = vol.value / 100; });
 
 /* Календарь: ноябрь 2026 */
 const g = document.getElementById("grid");
@@ -224,14 +250,21 @@ function tick() {
 }
 tick();
 
-/* Ответ → WhatsApp */
-document.getElementById("form").addEventListener("submit", e => {
+/* Ответ → Google Таблица */
+const form = document.getElementById("form"), err = document.getElementById("err"), ok = document.getElementById("ok");
+form.addEventListener("submit", async e => {
   e.preventDefault();
-  const name = document.getElementById("name").value.trim();
-  if (!name) { document.getElementById("err").style.display = "block"; return; }
-  document.getElementById("err").style.display = "none";
-  const msg = `Саламатсызбы! Семинар (25-ноябрь 2026).\nАты-жөнү: ${name}\nМектеп/уюм: ${school.value.trim() || "-"}\nЖообу: ${ans.value}` + (note.value.trim() ? `\nБилдирүү: ${note.value.trim()}` : "");
-  window.open(`https://wa.me/${WHATSAPP}?text=${encodeURIComponent(msg)}`, "_blank");
+  const btn = form.querySelector("button[type=submit]");
+  if (!name.value.trim()) { err.textContent = "Аты-жөнүңүздү жазыңыз."; err.style.display = "block"; return; }
+  err.style.display = "none"; btn.disabled = true; btn.textContent = "Жөнөтүлүүдө...";
+  try {
+    await fetch(SHEET_URL, { method: "POST", mode: "no-cors", body: new URLSearchParams({
+      name: name.value.trim(), school: school.value.trim(), answer: ans.value, note: note.value.trim() }) });
+    form.reset(); ok.style.display = "block"; btn.textContent = "Жөнөтүлдү";
+  } catch (x) {
+    err.textContent = "Жөнөтүлгөн жок. Интернетти текшерип, кайра аракет кылыңыз."; err.style.display = "block";
+    btn.disabled = false; btn.textContent = "Жооп жөнөтүү";
+  }
 });
 </script>
 </body>
