@@ -251,15 +251,17 @@ function tick() {
 tick();
 
 /* Ответ → Google Таблица */
+const $ = id => document.getElementById(id);
+const nameEl = $("name"), schoolEl = $("school"), ansEl = $("ans"), noteEl = $("note");
 const form = document.getElementById("form"), err = document.getElementById("err"), ok = document.getElementById("ok");
 form.addEventListener("submit", async e => {
   e.preventDefault();
   const btn = form.querySelector("button[type=submit]");
-  if (!name.value.trim()) { err.textContent = "Аты-жөнүңүздү жазыңыз."; err.style.display = "block"; return; }
+  if (!nameEl.value.trim()) { err.textContent = "Аты-жөнүңүздү жазыңыз."; err.style.display = "block"; return; }
   err.style.display = "none"; btn.disabled = true; btn.textContent = "Жөнөтүлүүдө...";
   try {
     await fetch(SHEET_URL, { method: "POST", mode: "no-cors", body: new URLSearchParams({
-      name: name.value.trim(), school: school.value.trim(), answer: ans.value, note: note.value.trim() }) });
+      name: nameEl.value.trim(), school: schoolEl.value.trim(), answer: ansEl.value, note: noteEl.value.trim() }) });
     form.reset(); ok.style.display = "block"; btn.textContent = "Жөнөтүлдү";
   } catch (x) {
     err.textContent = "Жөнөтүлгөн жок. Интернетти текшерип, кайра аракет кылыңыз."; err.style.display = "block";
